@@ -10,6 +10,10 @@
 (function () {
   "use strict";
   const cfg = window.APP_CONFIG;
+  if (!window.supabase || !cfg) {
+    document.getElementById("cargando").innerHTML = '<div class="msg err">No se pudo cargar la conexión con la base. Revisa tu internet y recarga la página; si sigue, avisa al administrador.</div>';
+    return;
+  }
   const sb = window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_KEY);
   const $ = (s) => document.querySelector(s);
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -367,5 +371,8 @@
     msg("#ajustes-msg", "ok", "Guardado.");
   });
 
-  arrancar();
+  arrancar().catch((e) => {
+    document.getElementById("cargando").hidden = false;
+    document.getElementById("cargando").innerHTML = '<div class="msg err">No se pudo iniciar la app (' + esc(e && e.message || e) + '). Recarga la página; si sigue, avisa al administrador.</div>';
+  });
 })();
