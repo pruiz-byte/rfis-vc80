@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>RFIs VC80</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>RFIs VC80</h1>
+      <div class="sub">Villa Corales 80 · Regla del proyecto: ningún RFI más de <span id="tol">7</span> días sin respuesta · Hoy <span id="hoy" class="num"></span></div>
+    </div>
+    <div class="who" id="who" hidden>
+      <span id="who-correo" class="note"></span><span id="who-rol" class="rol"></span>
+      <button class="btn small ghost" id="btn-salir" type="button">Cerrar sesión</button>
+    </div>
+  </header>
+
+  <!-- Estado de carga inicial -->
+  <section id="cargando" class="tab"><div class="empty"><span class="spin"></span><br>Cargando…</div></section>
+
+  <!-- Inicio de sesión -->
+  <section id="login" class="tab" hidden>
+    <form class="card login" id="form-login">
+      <h2>Iniciar sesión</h2>
+      <p class="note">Solo para usuarios invitados. Te enviamos un enlace de acceso a tu correo; ábrelo en este mismo navegador.</p>
+      <label class="field" for="login-correo"><span class="lbl">Correo</span><input id="login-correo" type="email" autocomplete="email" required></label>
+      <button class="btn" type="submit" id="btn-login">Enviarme el enlace</button>
+      <div id="login-msg"></div>
+    </form>
+  </section>
+
+  <!-- Cuenta pendiente de activación -->
+  <section id="pendiente" class="tab" hidden>
+    <div class="empty"><strong>Cuenta pendiente de activación</strong>Iniciaste sesión, pero un administrador todavía no te asigna un rol. Cuando lo haga, recarga esta página.</div>
+  </section>
+
+  <!-- App -->
+  <div id="app" hidden>
+    <nav class="tabs" role="tablist">
+      <button role="tab" data-tab="matriz" aria-selected="true">Matriz</button>
+      <button role="tab" data-tab="nuevo" aria-selected="false" data-roles="admin,residente">Nuevo RFI</button>
+      <button role="tab" data-tab="auditoria" aria-selected="false" data-roles="admin,director">Auditoría</button>
+      <button role="tab" data-tab="usuarios" aria-selected="false" data-roles="admin">Usuarios</button>
+      <button role="tab" data-tab="ajustes" aria-selected="false">Ajustes</button>
+    </nav>
+
+    <section class="tab" id="matriz">
+      <div class="kpis" id="kpis"></div>
+      <div class="filters">
+        <select id="f-estado" aria-label="Estado"><option value="abierto">Abiertos</option><option value="cerrado">Respondidos</option><option value="">Todos</option></select>
+        <select id="f-frente" aria-label="Frente"><option value="">Todos los frentes</option></select>
+        <label class="check" for="f-ruta"><input type="checkbox" id="f-ruta"> Solo ruta crítica</label>
+      </div>
+      <div id="matriz-msg"></div>
+      <div id="tabla"></div>
+      <div id="detalle"></div>
+    </section>
+
+    <section class="tab" id="nuevo" hidden>
+      <form class="card" id="form-nuevo">
+        <h2>Nuevo RFI</h2>
+        <p class="note">La llave RFI-VC80-NNN la asigna la base. Si el requerimiento ya existe, no lo crees: abre el RFI en la Matriz y agrega una reiteración.</p>
+        <div class="grid2">
+          <label class="field" for="n-frente"><span class="lbl">Frente</span><select id="n-frente" required></select></label>
+          <label class="field" for="n-nivel"><span class="lbl">Nivel</span><input id="n-nivel" placeholder="Ej. Primer nivel"></label>
+        </div>
+        <div id="n-dup"></div>
+        <label class="field" for="n-necesidad"><span class="lbl">Qué falta</span><textarea id="n-necesidad" required style="min-height:64px"></textarea></label>
+        <div class="grid2">
+          <label class="field" for="n-tipo"><span class="lbl">Fecha de solicitud</span>
+            <select id="n-tipo"><option value="dia">Día exacto</option><option value="mes">Solo el mes (no calcula mora)</option><option value="ninguna">No se sabe</option></select></label>
+          <label class="field" for="n-fecha" id="w-n-fecha"><span class="lbl">Fecha</span><input id="n-fecha" type="date"></label>
+        </div>
+        <div class="grid2">
+          <label class="field" for="n-lead"><span class="lbl">Lead time (si aplica)</span><input id="n-lead" type="number" min="1" step="1" inputmode="numeric"></label>
+          <label class="field" for="n-lead-u"><span class="lbl">Unidad</span><select id="n-lead-u"><option value="dias">días</option><option value="semanas">semanas</option><option value="meses" selected>meses</option></select></label>
+        </div>
+        <label class="check" for="n-detiene"><input type="checkbox" id="n-detiene"> Detiene o va a detener una cuadrilla</label>
+        <label class="check" for="n-ruta"><input type="checkbox" id="n-ruta"> Está en ruta crítica</label>
+        <label class="field" for="n-origen"><span class="lbl">Texto de origen (correo o mensaje donde se pidió)</span><textarea id="n-origen"></textarea></label>
+        <div class="row"><button class="btn" type="submit" id="btn-crear">Crear RFI</button></div>
+        <div id="nuevo-msg"></div>
+      </form>
+    </section>
+
+    <section class="tab" id="auditoria" hidden>
+      <div class="card">
+        <div class="rfi-head"><h2>Auditoría de cambios</h2>
+          <select id="a-tabla" aria-label="Tabla"><option value="">Todas las tablas</option></select></div>
+        <p class="note">Cada cambio en la base: quién, cuándo, desde dónde y qué campos. No se puede editar ni borrar.</p>
+        <div id="audit-tabla"></div>
+      </div>
+      <div class="card">
+        <h2>Accesos</h2>
+        <p class="note">Inicios de sesión, invitaciones y cambios de acceso registrados por la autenticación.</p>
+        <div id="accesos-tabla"></div>
+      </div>
+    </section>
+
+    <section class="tab" id="usuarios" hidden>
+      <div class="card">
+        <h2>Usuarios y roles</h2>
+        <p class="note">Las cuentas nuevas llegan inactivas. Invítalas desde Supabase (Authentication → Users) y actívalas aquí.</p>
+        <div id="usuarios-tabla"></div>
+        <div id="usuarios-msg"></div>
+      </div>
+    </section>
+
+    <section class="tab" id="ajustes" hidden>
+      <form class="card" id="form-ajustes">
+        <h2>Proyecto</h2>
+        <div class="grid2">
+          <label class="field" for="c-ini"><span class="lbl">Inicio del cese navideño</span><input id="c-ini" type="date"></label>
+          <label class="field" for="c-fin"><span class="lbl">Fin del cese</span><input id="c-fin" type="date"></label>
+        </div>
+        <div class="note" id="c-dias"></div>
+        <div class="row"><button class="btn" type="submit" id="btn-ajustes">Guardar</button></div>
+        <div id="ajustes-msg"></div>
+      </form>
+    </section>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
