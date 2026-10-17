@@ -47,7 +47,7 @@
     sb.auth.onAuthStateChange((_e, session) => { alCambiarSesion(session); });
   }
 
-  let sesionActual = null;
+  let sesionActual; // undefined al inicio: la primera llamada siempre decide qué pantalla mostrar
   async function alCambiarSesion(session) {
     const uid = session?.user?.id || null;
     if (uid === sesionActual) return;
