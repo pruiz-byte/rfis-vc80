@@ -71,19 +71,28 @@
 
   $("#form-login").addEventListener("submit", async (ev) => {
     ev.preventDefault();
-    const correo = $("#login-correo").value.trim();
-    $("#btn-login").disabled = true;
-    msg("#login-msg", "", "");
-    const { error } = await sb.auth.signInWithOtp({ email: correo, options: { shouldCreateUser: false, emailRedirectTo: location.origin } });
+    const correo = $("#login-correo").value.trim(), clave = $("#login-clave").value;
+    if (!clave) return enviarEnlace();
+    $("#btn-login").disabled = true; msg("#login-msg", "", "");
+    const { error } = await sb.auth.signInWithPassword({ email: correo, password: clave });
     $("#btn-login").disabled = false;
-    if (error) {
-      msg("#login-msg", "err", /not allowed|signups|not found/i.test(error.message)
-        ? "Ese correo no está invitado. Pide acceso al administrador."
-        : "No se pudo enviar el enlace: " + esc(error.message));
-    } else {
-      msg("#login-msg", "ok", "Listo. Revisa tu correo y abre el enlace en este mismo navegador. El enlace sirve una sola vez.");
-    }
+    if (error) msg("#login-msg", "err", /invalid/i.test(error.message)
+      ? "Correo o contraseña incorrectos. Si no has creado tu contraseña, pide un enlace de acceso."
+      : "No se pudo entrar: " + esc(error.message));
   });
+  $("#btn-enlace").addEventListener("click", enviarEnlace);
+  async function enviarEnlace() {
+    const correo = $("#login-correo").value.trim();
+    if (!correo) return msg("#login-msg", "warn", "Escribe tu correo.");
+    $("#btn-enlace").disabled = true; msg("#login-msg", "", "");
+    const { error } = await sb.auth.signInWithOtp({ email: correo, options: { shouldCreateUser: false, emailRedirectTo: location.origin } });
+    $("#btn-enlace").disabled = false;
+    if (!error) return msg("#login-msg", "ok", "Listo. Revisa tu correo y abre el enlace en este mismo navegador. El enlace sirve una sola vez.");
+    if (/rate limit/i.test(error.message)) return msg("#login-msg", "warn", "Se alcanzó el límite de correos por hora del servicio. Espera un rato y vuelve a intentarlo, o entra con tu contraseña si ya la creaste.");
+    msg("#login-msg", "err", /not allowed|signups|not found/i.test(error.message)
+      ? "Ese correo no está invitado. Pide acceso al administrador."
+      : "No se pudo enviar el enlace: " + esc(error.message));
+  }
   $("#btn-salir").addEventListener("click", async () => { await sb.auth.signOut(); });
 
   /* ---------- navegación ---------- */
@@ -369,6 +378,19 @@
     if (error) return msg("#ajustes-msg", "err", "No se guardó: " + esc(error.message));
     S.config.cese_inicio = a; S.config.cese_fin = b;
     msg("#ajustes-msg", "ok", "Guardado.");
+  });
+
+  $("#form-clave").addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    const k1 = $("#k-1").value, k2 = $("#k-2").value;
+    if (k1.length < 8) return msg("#clave-msg", "warn", "La contraseña debe tener al menos 8 caracteres.");
+    if (k1 !== k2) return msg("#clave-msg", "warn", "Las dos contraseñas no coinciden.");
+    $("#btn-clave").disabled = true;
+    const { error } = await sb.auth.updateUser({ password: k1 });
+    $("#btn-clave").disabled = false;
+    if (error) return msg("#clave-msg", "err", "No se guardó: " + esc(error.message));
+    $("#form-clave").reset();
+    msg("#clave-msg", "ok", "Contraseña guardada. La próxima vez entra con tu correo y esta contraseña.");
   });
 
   arrancar().catch((e) => {

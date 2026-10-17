@@ -29,9 +29,12 @@
   <section id="login" class="tab" hidden>
     <form class="card login" id="form-login">
       <h2>Iniciar sesión</h2>
-      <p class="note">Solo para usuarios invitados. Te enviamos un enlace de acceso a tu correo; ábrelo en este mismo navegador.</p>
+      <p class="note">Solo para usuarios invitados.</p>
       <label class="field" for="login-correo"><span class="lbl">Correo</span><input id="login-correo" type="email" autocomplete="email" required></label>
-      <button class="btn" type="submit" id="btn-login">Enviarme el enlace</button>
+      <label class="field" for="login-clave"><span class="lbl">Contraseña</span><input id="login-clave" type="password" autocomplete="current-password"></label>
+      <button class="btn" type="submit" id="btn-login">Entrar</button>
+      <p class="note">¿Primera vez o no tienes contraseña? Deja la contraseña vacía y pide un enlace al correo. Al entrar, créala en Ajustes.</p>
+      <button class="btn ghost" type="button" id="btn-enlace">Enviarme un enlace de acceso</button>
       <div id="login-msg"></div>
     </form>
   </section>
@@ -123,6 +126,16 @@
         <div class="note" id="c-dias"></div>
         <div class="row"><button class="btn" type="submit" id="btn-ajustes">Guardar</button></div>
         <div id="ajustes-msg"></div>
+      </form>
+      <form class="card" id="form-clave">
+        <h2>Mi contraseña</h2>
+        <p class="note">Créala o cámbiala para entrar sin esperar un correo. Mínimo 8 caracteres.</p>
+        <div class="grid2">
+          <label class="field" for="k-1"><span class="lbl">Nueva contraseña</span><input id="k-1" type="password" autocomplete="new-password" minlength="8"></label>
+          <label class="field" for="k-2"><span class="lbl">Repítela</span><input id="k-2" type="password" autocomplete="new-password" minlength="8"></label>
+        </div>
+        <div class="row"><button class="btn" type="submit" id="btn-clave">Guardar contraseña</button></div>
+        <div id="clave-msg"></div>
       </form>
     </section>
   </div>
