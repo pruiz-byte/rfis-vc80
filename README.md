@@ -20,12 +20,15 @@ En Supabase → Authentication → URL Configuration:
 
 Sin esto, los enlaces de acceso siguen llevando a `localhost:3000`.
 
-## Roles
-| Rol | Ve | Cambia |
-|---|---|---|
-| admin | Todo, incluida la auditoría | Todo; activa usuarios y asigna roles |
-| residente | Matriz, bitácora, ajustes | RFIs, bitácora, ajustes |
-| director | Todo, incluida la auditoría | Nada |
-| consulta | Matriz | Nada |
+## Roles (marco normativo Taller 8 · v0.8)
+| Rol en la base | Quién | Lee | Escribe | Aprueba |
+|---|---|---|---|---|
+| admin | Residencia (gestiona usuarios) | Todo, incluida la auditoría | Todo | Cartas y cambios menores |
+| residente | Residencia de Obra | Todos los RFIs y la bitácora | RFIs, reiteraciones, propuestas de cambio | Cartas y cambios menores |
+| contratista | Contratista / Diseñador | Solo los RFIs de su especialidad (frentes asignados), sin correos del cliente | Respuestas técnicas en sus RFIs abiertos | Nada |
+| director | Interventoría / Dirección de Obra | Todo, incluida la auditoría | Observaciones y validaciones | Cambios mayores |
+| consulta | Lectura | La matriz | Nada | Nada |
 
-Las cuentas nuevas se invitan desde Supabase (Authentication → Users → Invite user) y llegan inactivas; el admin las activa en la pestaña Usuarios.
+Todo lo anterior lo aplica la base (RLS y funciones `agregar_nota`, `decidir_cambio`); la app solo oculta botones.
+Las cuentas nuevas se invitan desde Supabase (Authentication → Users → Invite user) y llegan inactivas; el admin las activa en la pestaña Usuarios y, si es contratista, le asigna la especialidad.
+La pestaña **Política** muestra la clasificación de datos y las cinco reglas de uso.

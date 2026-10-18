@@ -1,8 +1,9 @@
 /*
  * RFIs VC80 · app web (Vercel + Supabase)
  * - Acceso: Supabase Auth con enlace por correo, solo para usuarios invitados.
- * - Permisos: los decide la base por rol (admin, residente, director, consulta). La app solo
- *   oculta botones; aunque alguien los forzara, la base rechaza lo que su rol no permite.
+ * - Permisos: los decide la base por rol (admin, residente, director = Interventoría, consulta,
+ *   contratista = solo su especialidad). La app solo oculta botones; aunque alguien los forzara,
+ *   la base rechaza lo que su rol no permite (RLS). Marco normativo: Taller 8 · v0.8.
  * - Cálculos: los días los calcula la base (vista v_registro_mora) o este código a partir de
  *   fechas registradas. Ninguna cifra sale de texto escrito por una IA.
  * - Trazabilidad: cada cambio queda en auditoria_eventos con el usuario que lo hizo.
@@ -32,6 +33,24 @@
   /* ---------- roles ---------- */
   const rol = () => S.perfil?.rol;
   const puede = (...roles) => roles.includes(rol());
+  const ETQ_ROL = { admin: "Admin · Residencia", residente: "Residencia de Obra", director: "Interventoría", consulta: "Consulta", contratista: "Contratista" };
+
+  /* ---------- datos personales (regla 2 de la política) ---------- */
+  const PATRONES = [
+    [/\b\d{3}-?\d{7}-?\d\b/, "un número que parece cédula"],
+    [/(?:\+?1[\s.-]?)?\(?\b(?:809|829|849)\)?[\s.-]?\d{3}[\s.-]?\d{4}\b/, "un teléfono"],
+    [/\b(salario|salarios|sueldo|sueldos|n[oó]mina)\b/i, "información de salarios"]
+  ];
+  function datosSensibles(texto) { return PATRONES.filter(([re]) => re.test(texto || "")).map(([, n]) => n); }
+  // Devuelve true si se puede guardar. Si hay datos sensibles, avisa y exige un segundo clic.
+  function datosOk(textos, boton, salida) {
+    const hallados = [...new Set(textos.flatMap(datosSensibles))];
+    const firma = textos.join("\u0000");
+    if (!hallados.length || boton.dataset.confirmado === firma) { delete boton.dataset.confirmado; return true; }
+    boton.dataset.confirmado = firma;
+    msg(salida, "warn", `El texto contiene ${hallados.join(", ")}. La política del proyecto prohíbe guardar datos personales que no sean necesarios: bórralos. Si ya lo revisaste y deben quedar, pulsa el botón otra vez.`);
+    return false;
+  }
 
   function msg(el, tipo, texto) { $(el).innerHTML = texto ? `<div class="msg ${tipo}">${texto}</div>` : ""; }
   function mostrar(id) {
@@ -55,18 +74,19 @@
     if (!session) { S.user = null; S.perfil = null; $("#who").hidden = true; mostrar("login"); return; }
     S.user = session.user;
     mostrar("cargando");
-    const { data: perfil, error } = await sb.from("perfiles").select("rol,activo,correo,nombre").eq("id", uid).maybeSingle();
+    const { data: perfil, error } = await sb.from("perfiles").select("rol,activo,correo,nombre,frentes").eq("id", uid).maybeSingle();
     $("#who").hidden = false;
     $("#who-correo").textContent = session.user.email || "";
     if (error || !perfil || !perfil.activo) { $("#who-rol").textContent = "pendiente"; mostrar("pendiente"); return; }
     S.perfil = perfil;
-    $("#who-rol").textContent = perfil.rol;
+    $("#who-rol").textContent = ETQ_ROL[perfil.rol] || perfil.rol;
     document.querySelectorAll("nav.tabs button").forEach((b) => {
       const r = b.dataset.roles; b.hidden = r ? !r.split(",").includes(perfil.rol) : false;
     });
     mostrar("app");
     await cargarBase();
     irA("matriz");
+    contarPendientes();
   }
 
   $("#form-login").addEventListener("submit", async (ev) => {
@@ -102,6 +122,7 @@
     document.querySelectorAll("#app section.tab").forEach((s) => (s.hidden = s.id !== t));
     if (t === "matriz") cargarMatriz();
     if (t === "auditoria") cargarAuditoria();
+    if (t === "cambios") cargarCambios();
     if (t === "usuarios") cargarUsuarios();
     if (t === "ajustes") pintarAjustes();
   }
@@ -115,8 +136,9 @@
     S.frentes = fr.data || [];
     S.config = cf.data || { tolerancia_dias: 7 };
     $("#tol").textContent = S.config.tolerancia_dias;
+    const visibles = puede("contratista") ? S.frentes.filter((f) => (S.perfil.frentes || []).includes(f.codigo)) : S.frentes;
+    $("#f-frente").innerHTML = `<option value="">${puede("contratista") ? "Mis especialidades" : "Todos los frentes"}</option>` + visibles.map((f) => `<option value="${esc(f.codigo)}">${esc(f.codigo)} · ${esc(f.nombre)}</option>`).join("");
     const opts = S.frentes.map((f) => `<option value="${esc(f.codigo)}">${esc(f.codigo)} · ${esc(f.nombre)}</option>`).join("");
-    $("#f-frente").innerHTML = `<option value="">Todos los frentes</option>` + opts;
     $("#n-frente").innerHTML = `<option value="">Elige el frente</option>` + opts;
   }
   const nombreFrente = (c) => S.frentes.find((f) => f.codigo === c)?.nombre || c;
@@ -169,23 +191,46 @@
   async function abrirDetalle(id) {
     S.abierto = id;
     $("#detalle").innerHTML = `<div class="card panel"><span class="spin"></span> Abriendo ${esc(id)}…</div>`;
-    const [r, b] = await Promise.all([
+    const verCambios = puede("admin", "residente", "director");
+    if (verCambios) await cargarCorreos();
+    const [r, b, c] = await Promise.all([
       sb.from("rfis").select("*").eq("id", id).single(),
-      sb.from("rfi_seguimientos").select("tipo,texto,registrado_en,registrado_por").eq("rfi_id", id).order("registrado_en")
+      sb.from("rfi_seguimientos").select("tipo,texto,registrado_en,registrado_por").eq("rfi_id", id).order("registrado_en"),
+      verCambios ? sb.from("rfi_cambios").select("*").eq("rfi_id", id).order("id", { ascending: false }) : Promise.resolve({ data: [] })
     ]);
     if (r.error) { $("#detalle").innerHTML = `<div class="msg err">No se pudo abrir ${esc(id)}: ${esc(r.error.message)}</div>`; return; }
-    pintarDetalle(r.data, b.data || []);
+    pintarDetalle(r.data, b.data || [], c.data || []);
     $("#detalle").scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
-  function pintarDetalle(x, bit) {
+  function pintarDetalle(x, bit, cambios) {
     const fila = S.filas.find((f) => f.id === x.id) || {};
     const editar = puede("admin", "residente");
     const opcFrentes = S.frentes.map((f) => `<option value="${esc(f.codigo)}"${f.codigo === x.frente_codigo ? " selected" : ""}>${esc(f.codigo)} · ${esc(f.nombre)}</option>`).join("");
-    const etiquetaTipo = { registro_inicial: "Registro inicial", reiteracion: "Reiteración", respuesta: "Respuesta", cambio: "Cambio de datos" };
-    const bitHtml = puede("admin", "residente", "director")
-      ? (bit.length ? `<ol class="bitacora">${bit.map((s) => `<li><span class="lbl">${esc(etiquetaTipo[s.tipo] || s.tipo)} · ${esc(fmtHora(s.registrado_en))}</span><div>${esc(s.texto)}</div></li>`).join("")}</ol>` : `<div class="note">Sin entradas.</div>`)
+    const etiquetaTipo = { registro_inicial: "Registro inicial", reiteracion: "Reiteración", respuesta: "Respuesta técnica", cambio: "Cambio de datos", observacion: "Observación de Interventoría" };
+    const bitHtml = puede("admin", "residente", "director", "contratista")
+      ? (puede("contratista") ? `<div class="note">Ves solo respuestas técnicas y observaciones; los correos del cliente son de uso interno.</div>` : "") +
+        (bit.length ? `<ol class="bitacora">${bit.map((s) => `<li><span class="lbl">${esc(etiquetaTipo[s.tipo] || s.tipo)} · ${esc(fmtHora(s.registrado_en))}</span><div>${esc(s.texto)}</div></li>`).join("")}</ol>` : `<div class="note">Sin entradas.</div>`)
       : `<div class="note">Tu rol no ve la bitácora (contiene correos de terceros).</div>`;
+    const abierto = x.estado === "abierto";
+    const notaHtml = puede("contratista") && abierto
+      ? `<div class="seccion"><h3>Respuesta técnica</h3>
+         <label class="field" for="d-nota"><span class="lbl">Tu respuesta a este requerimiento (queda con tu usuario y la hora)</span><textarea id="d-nota" style="min-height:64px"></textarea></label>
+         <div class="row"><button class="btn small" type="button" id="d-btn-nota" data-tipo="respuesta">Registrar respuesta</button></div>
+         <p class="note">La Residencia revisa tu respuesta y es quien marca el RFI como respondido.</p></div>`
+      : puede("director")
+      ? `<div class="seccion"><h3>Observación o validación</h3>
+         <label class="field" for="d-nota"><span class="lbl">Observación de Interventoría sobre este RFI</span><textarea id="d-nota" style="min-height:64px"></textarea></label>
+         <div class="row"><button class="btn small" type="button" id="d-btn-nota" data-tipo="observacion">Registrar observación</button></div></div>`
+      : "";
+    const cambiosHtml = puede("admin", "residente", "director")
+      ? `<div class="seccion"><h3>Solicitudes de cambio</h3>
+         ${cambios.length ? `<div id="d-cambios">${cambios.map(htmlCambio).join("")}</div>` : `<div class="note">Sin solicitudes.</div>`}
+         ${puede("admin", "residente") ? `
+         <label class="field" for="d-cambio"><span class="lbl">Proponer un cambio (especificación, alcance o diseño)</span><textarea id="d-cambio" style="min-height:56px"></textarea></label>
+         <label class="check" for="d-mayor"><input type="checkbox" id="d-mayor"> Cambio mayor: lo aprueba la Interventoría / Dirección de Obra</label>
+         <div class="row"><button class="btn small ghost" type="button" id="d-btn-cambio">Enviar a aprobación</button></div>` : ""}</div>`
+      : "";
 
     $("#detalle").innerHTML = `<div class="card panel">
       <div class="rfi-head"><span class="key">${esc(x.id)}</span><button class="btn small ghost" type="button" id="d-cerrar-panel">Cerrar</button></div>
@@ -199,6 +244,8 @@
         <div>Estado</div><div>${x.estado === "cerrado" ? "Respondido el " + fmt(x.fecha_respuesta) : "Abierto"}</div>
       </div>
       <h3>Bitácora</h3>${bitHtml}
+      ${notaHtml}
+      ${cambiosHtml}
       ${editar ? `
       <h3>Agregar reiteración</h3>
       <label class="field" for="d-reit"><span class="lbl">Texto del nuevo mensaje sobre este mismo requerimiento</span><textarea id="d-reit" style="min-height:64px"></textarea></label>
@@ -220,8 +267,10 @@
         <label class="check" for="d-detiene"><input type="checkbox" id="d-detiene"${x.detiene_cuadrilla ? " checked" : ""}> Detiene cuadrilla</label>
         <label class="check" for="d-ruta"><input type="checkbox" id="d-ruta"${x.ruta_critica ? " checked" : ""}> Ruta crítica</label>
       </div>
-      <div class="row"><button class="btn small" type="button" id="d-btn-guardar">Guardar cambios</button>
-        ${x.carta_aprobada_en ? "" : `<button class="btn small ghost" type="button" id="d-btn-carta">Registrar carta enviada hoy</button>`}</div>
+      <div class="row"><button class="btn small" type="button" id="d-btn-guardar">Guardar cambios</button></div>
+      ${x.carta_aprobada_en ? "" : `<h3>Carta formal</h3>
+      <label class="check" for="d-revise"><input type="checkbox" id="d-revise"> Revisé la carta completa y la apruebo como Residencia de Obra. Si se hizo con IA, lleva la leyenda «Elaborado con asistencia de IA y verificado por la Residencia de Obra».</label>
+      <div class="row"><button class="btn small ghost" type="button" id="d-btn-carta">Registrar carta aprobada y enviada hoy</button></div>`}
       <h3>Estado</h3>
       ${x.estado === "abierto"
         ? `<div class="row"><label class="field" for="d-fresp"><span class="lbl">Fecha de respuesta del cliente</span><input id="d-fresp" type="date" value="${hoyIso()}"></label>
@@ -232,11 +281,32 @@
     </div>`;
 
     $("#d-cerrar-panel").onclick = () => { $("#detalle").innerHTML = ""; S.abierto = null; };
+    enlazarDecisiones($("#detalle"), () => refrescar(x.id, "Decisión registrada. Quedó en la auditoría con tu usuario."));
+    if ($("#d-btn-nota")) $("#d-btn-nota").onclick = async () => {
+      const t = $("#d-nota").value.trim(), boton = $("#d-btn-nota");
+      if (!t) return msg("#d-msg", "warn", "Escribe el texto antes de registrarlo.");
+      if (!datosOk([t], boton, "#d-msg")) return;
+      const { data, error } = await sb.rpc("agregar_nota", { p_rfi: x.id, p_tipo: boton.dataset.tipo, p_texto: t });
+      if (error) return msg("#d-msg", "err", "No se registró: " + esc(error.message));
+      if (data === "duplicado") return msg("#d-msg", "warn", "Ese mismo texto ya estaba registrado. No se duplicó.");
+      await refrescar(x.id, boton.dataset.tipo === "respuesta" ? "Respuesta registrada. La Residencia la revisará." : "Observación registrada.");
+    };
+    if ($("#d-btn-cambio")) $("#d-btn-cambio").onclick = async () => {
+      const t = $("#d-cambio").value.trim(), boton = $("#d-btn-cambio");
+      if (!t) return msg("#d-msg", "warn", "Describe el cambio antes de enviarlo.");
+      if (!datosOk([t], boton, "#d-msg")) return;
+      const mayor = $("#d-mayor").checked;
+      const { error } = await sb.from("rfi_cambios").insert({ rfi_id: x.id, descripcion: t, mayor });
+      if (error) return msg("#d-msg", "err", "No se envió: " + esc(error.message));
+      contarPendientes();
+      await refrescar(x.id, mayor ? "Cambio mayor enviado. Lo decide la Interventoría." : "Cambio menor enviado. Lo decide la Residencia.");
+    };
     if (!editar) return;
 
     $("#d-btn-reit").onclick = async () => {
       const t = $("#d-reit").value.trim();
       if (!t) return msg("#d-msg", "warn", "Escribe el texto del mensaje antes de agregarlo.");
+      if (!datosOk([t], $("#d-btn-reit"), "#d-msg")) return;
       const { data, error } = await sb.rpc("agregar_reiteracion", { p_rfi: x.id, p_texto: t });
       if (error) return msg("#d-msg", "err", "No se pudo agregar: " + esc(error.message));
       if (data === "duplicado") return msg("#d-msg", "warn", "Ese mismo mensaje ya estaba en la bitácora. No se duplicó.");
@@ -258,9 +328,10 @@
       await refrescar(x.id, "Cambios guardados. La llave no cambia.");
     };
     if ($("#d-btn-carta")) $("#d-btn-carta").onclick = async () => {
+      if (!$("#d-revise").checked) return msg("#d-msg", "warn", "Marca la casilla de revisión: ninguna carta se registra sin que la Residencia la haya revisado.");
       const { error } = await sb.from("rfis").update({ carta_aprobada_en: new Date().toISOString() }).eq("id", x.id);
       if (error) return msg("#d-msg", "err", "No se registró: " + esc(error.message));
-      await refrescar(x.id, "Carta registrada como enviada hoy.");
+      await refrescar(x.id, "Carta registrada como aprobada y enviada hoy.");
     };
     if ($("#d-btn-cerrar")) $("#d-btn-cerrar").onclick = async () => {
       const f = $("#d-fresp").value;
@@ -300,6 +371,7 @@
     if (!$("#n-frente").value) return msg("#nuevo-msg", "warn", "Elige el frente.");
     if (tipo !== "ninguna" && !fecha) return msg("#nuevo-msg", "warn", "Pon la fecha de solicitud, o elige \"No se sabe\".");
     const lead = parseInt($("#n-lead").value, 10);
+    if (!datosOk([$("#n-necesidad").value, $("#n-origen").value], $("#btn-crear"), "#nuevo-msg")) return;
     $("#btn-crear").disabled = true;
     const { data, error } = await sb.rpc("crear_rfi", {
       p_frente: $("#n-frente").value, p_nivel: $("#n-nivel").value, p_necesidad: $("#n-necesidad").value.trim(),
@@ -314,8 +386,56 @@
     await cargarMatriz();
   });
 
+  /* ---------- solicitudes de cambio ---------- */
+  const puedeDecidir = (c) => c.estado === "pendiente" && (c.mayor ? puede("director") : puede("admin", "residente"));
+  const PILL_CAMBIO = { pendiente: ["amber", "Pendiente"], aprobado: ["green", "Aprobado"], rechazado: ["red", "Rechazado"] };
+  function htmlCambio(c) {
+    const p = PILL_CAMBIO[c.estado] || ["grey", c.estado];
+    const quien = (id) => S.correos?.[id] || "otro usuario";
+    return `<div class="cambio" data-cambio="${c.id}">
+      <div class="row"><span class="key">${esc(c.rfi_id)}</span><span class="pill ${c.mayor ? "red" : "grey"}">${c.mayor ? "Mayor · Interventoría" : "Menor · Residencia"}</span><span class="pill ${p[0]}">${p[1]}</span></div>
+      <div>${esc(c.descripcion)}</div>
+      <div class="note">Propuesto ${esc(fmtHora(c.propuesto_en))}${S.correos ? " por " + esc(quien(c.propuesto_por)) : ""}${c.decidido_en ? ` · Decidido ${esc(fmtHora(c.decidido_en))}${S.correos ? " por " + esc(quien(c.decidido_por)) : ""}${c.nota_decision ? ": " + esc(c.nota_decision) : ""}` : ""}</div>
+      ${puedeDecidir(c) ? `<div class="row"><input class="c-nota" placeholder="Nota de la decisión (opcional)" aria-label="Nota de la decisión" style="flex:1 1 200px">
+        <button class="btn small" type="button" data-decidir="1">Aprobar</button><button class="btn small ghost" type="button" data-decidir="0">Rechazar</button></div>`
+        : c.estado === "pendiente" ? `<div class="note">${c.mayor ? "Espera la decisión de la Interventoría." : "Espera la decisión de la Residencia."}</div>` : ""}
+    </div>`;
+  }
+  function enlazarDecisiones(cont, despues) {
+    cont.querySelectorAll("[data-decidir]").forEach((b) => b.addEventListener("click", async () => {
+      const caja = b.closest("[data-cambio]");
+      const salida = cont.querySelector("#d-msg") ? "#d-msg" : "#cambios-msg";
+      const { error } = await sb.rpc("decidir_cambio", { p_id: Number(caja.dataset.cambio), p_aprobar: b.dataset.decidir === "1", p_nota: caja.querySelector(".c-nota").value });
+      if (error) return msg(salida, "err", "No se registró la decisión: " + esc(error.message));
+      contarPendientes();
+      await despues();
+    }));
+  }
+  async function cargarCorreos() {
+    if (S.correos || !puede("admin", "director")) return;
+    const { data } = await sb.from("perfiles").select("id,correo");
+    S.correos = Object.fromEntries((data || []).map((p) => [p.id, p.correo]));
+  }
+  $("#c-filtro").addEventListener("change", cargarCambios);
+  async function cargarCambios() {
+    $("#cambios-tabla").innerHTML = `<span class="spin"></span>`;
+    await cargarCorreos();
+    let q = sb.from("rfi_cambios").select("*").order("id", { ascending: false }).limit(200);
+    if ($("#c-filtro").value) q = q.eq("estado", $("#c-filtro").value);
+    const { data, error } = await q;
+    if (error) { $("#cambios-tabla").innerHTML = `<div class="msg err">No se pudieron leer las solicitudes: ${esc(error.message)}</div>`; return; }
+    $("#cambios-tabla").innerHTML = data.length ? data.map(htmlCambio).join("") : `<div class="empty"><strong>Sin solicitudes</strong>${$("#c-filtro").value ? "No hay cambios pendientes." : "Todavía no se ha propuesto ningún cambio."}</div>`;
+    enlazarDecisiones($("#cambios-tabla"), async () => { await cargarCambios(); msg("#cambios-msg", "ok", "Decisión registrada. Quedó en la auditoría con tu usuario."); });
+  }
+  async function contarPendientes() {
+    if (!puede("admin", "residente", "director")) return;
+    const { data } = await sb.from("rfi_cambios").select("id,mayor,estado").eq("estado", "pendiente");
+    const n = (data || []).filter(puedeDecidir).length;
+    $("#n-cambios").hidden = !n; $("#n-cambios").textContent = n;
+  }
+
   /* ---------- auditoría ---------- */
-  const TABLAS = ["rfis", "rfi_seguimientos", "responsables", "frentes_tecnicos", "perfiles", "config_proyecto", "levantamiento_medidas", "areas", "muros", "huecos", "elementos_lineales"];
+  const TABLAS = ["rfis", "rfi_seguimientos", "rfi_cambios", "responsables", "frentes_tecnicos", "perfiles", "config_proyecto", "levantamiento_medidas", "areas", "muros", "huecos", "elementos_lineales"];
   $("#a-tabla").innerHTML = `<option value="">Todas las tablas</option>` + TABLAS.map((t) => `<option value="${t}">${t}</option>`).join("");
   $("#a-tabla").addEventListener("change", cargarAuditoria);
 
@@ -339,19 +459,22 @@
 
   /* ---------- usuarios ---------- */
   async function cargarUsuarios() {
-    const { data, error } = await sb.from("perfiles").select("id,correo,nombre,empresa,rol,activo,creado_en").order("creado_en");
+    const { data, error } = await sb.from("perfiles").select("id,correo,nombre,empresa,rol,activo,creado_en,frentes").order("creado_en");
     if (error) { $("#usuarios-tabla").innerHTML = `<div class="msg err">${esc(error.message)}</div>`; return; }
-    const roles = ["admin", "residente", "director", "consulta"];
-    $("#usuarios-tabla").innerHTML = `<div class="tbl-wrap"><table><thead><tr><th>Correo</th><th>Nombre</th><th>Rol</th><th>Activo</th><th></th></tr></thead><tbody>${
+    const roles = ["admin", "residente", "director", "consulta", "contratista"];
+    $("#usuarios-tabla").innerHTML = `<div class="tbl-wrap"><table><thead><tr><th>Correo</th><th>Nombre</th><th>Rol</th><th>Especialidad (contratista)</th><th>Activo</th><th></th></tr></thead><tbody>${
       data.map((p) => `<tr data-id="${esc(p.id)}"><td>${esc(p.correo)}</td><td><input class="u-nombre" value="${esc(p.nombre || "")}" aria-label="Nombre"></td>
-        <td><select class="u-rol" aria-label="Rol">${roles.map((r) => `<option${r === p.rol ? " selected" : ""}>${r}</option>`).join("")}</select></td>
+        <td><select class="u-rol" aria-label="Rol">${roles.map((r) => `<option value="${r}"${r === p.rol ? " selected" : ""}>${esc(ETQ_ROL[r])}</option>`).join("")}</select></td>
+        <td><select class="u-frentes" multiple aria-label="Especialidad">${S.frentes.map((f) => `<option value="${esc(f.codigo)}"${(p.frentes || []).includes(f.codigo) ? " selected" : ""}>${esc(f.codigo)} · ${esc(f.nombre)}</option>`).join("")}</select></td>
         <td><input type="checkbox" class="u-activo" aria-label="Activo"${p.activo ? " checked" : ""}></td>
         <td><button class="btn small" type="button">Guardar</button></td></tr>`).join("")}</tbody></table></div>`;
     document.querySelectorAll("#usuarios-tabla tr[data-id] button").forEach((b) => b.addEventListener("click", async () => {
       const tr = b.closest("tr"), id = tr.dataset.id;
       const nuevoRol = tr.querySelector(".u-rol").value, activo = tr.querySelector(".u-activo").checked;
       if (id === S.user.id && (nuevoRol !== "admin" || !activo)) return msg("#usuarios-msg", "warn", "No puedes quitarte tu propio rol de admin desde aquí: te quedarías sin acceso a esta pantalla.");
-      const { error } = await sb.from("perfiles").update({ rol: nuevoRol, activo, nombre: tr.querySelector(".u-nombre").value.trim() || null }).eq("id", id);
+      const frentes = [...tr.querySelector(".u-frentes").selectedOptions].map((o) => o.value);
+      if (nuevoRol === "contratista" && !frentes.length) return msg("#usuarios-msg", "warn", "Elige al menos una especialidad para el contratista (Ctrl o Cmd + clic para varias). Sin ella no vería ningún RFI.");
+      const { error } = await sb.from("perfiles").update({ rol: nuevoRol, activo, frentes: nuevoRol === "contratista" ? frentes : [], nombre: tr.querySelector(".u-nombre").value.trim() || null }).eq("id", id);
       msg("#usuarios-msg", error ? "err" : "ok", error ? "No se guardó: " + esc(error.message) : "Usuario actualizado. El cambio quedó en la auditoría.");
     }));
   }

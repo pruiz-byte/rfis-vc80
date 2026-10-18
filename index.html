@@ -49,8 +49,10 @@
     <nav class="tabs" role="tablist">
       <button role="tab" data-tab="matriz" aria-selected="true">Matriz</button>
       <button role="tab" data-tab="nuevo" aria-selected="false" data-roles="admin,residente">Nuevo RFI</button>
+      <button role="tab" data-tab="cambios" aria-selected="false" data-roles="admin,residente,director">Cambios<span class="n" id="n-cambios" hidden></span></button>
       <button role="tab" data-tab="auditoria" aria-selected="false" data-roles="admin,director">Auditoría</button>
       <button role="tab" data-tab="usuarios" aria-selected="false" data-roles="admin">Usuarios</button>
+      <button role="tab" data-tab="politica" aria-selected="false">Política</button>
       <button role="tab" data-tab="ajustes" aria-selected="false">Ajustes</button>
     </nav>
 
@@ -88,9 +90,52 @@
         <label class="check" for="n-detiene"><input type="checkbox" id="n-detiene"> Detiene o va a detener una cuadrilla</label>
         <label class="check" for="n-ruta"><input type="checkbox" id="n-ruta"> Está en ruta crítica</label>
         <label class="field" for="n-origen"><span class="lbl">Texto de origen (correo o mensaje donde se pidió)</span><textarea id="n-origen"></textarea></label>
+        <p class="note">No pegues cédulas, salarios ni teléfonos personales. Si el correo los trae, bórralos antes de guardar.</p>
         <div class="row"><button class="btn" type="submit" id="btn-crear">Crear RFI</button></div>
         <div id="nuevo-msg"></div>
       </form>
+    </section>
+
+    <section class="tab" id="cambios" hidden>
+      <div class="card">
+        <div class="rfi-head"><h2>Solicitudes de cambio</h2>
+          <select id="c-filtro" aria-label="Estado"><option value="pendiente">Pendientes</option><option value="">Todas</option></select></div>
+        <p class="note">La Residencia propone el cambio desde el RFI. Un cambio menor lo decide la Residencia; un cambio mayor solo la Interventoría / Dirección de Obra. La base rechaza cualquier otra combinación.</p>
+        <div id="cambios-tabla"></div>
+        <div id="cambios-msg"></div>
+      </div>
+    </section>
+
+    <section class="tab" id="politica" hidden>
+      <div class="card">
+        <h2>Política de uso de datos e IA</h2>
+        <p class="note">Marco normativo del proyecto (Taller 8 · v0.8 · 18/10/2026). Aplica a todo el equipo de Villa Corales 80.</p>
+        <ol class="reglas">
+          <li><strong>Supervisión humana obligatoria.</strong> Toda carta formal, reclamo contractual o cambio de especificación lo revisa y aprueba la Residencia de Obra antes de enviarse. <span class="note">En la app: la carta solo se registra con la casilla de revisión marcada; los cambios pasan por aprobación.</span></li>
+          <li><strong>Prohibido subir datos personales y comerciales.</strong> Cédulas, datos de contacto de clientes, salarios y presupuestos confidenciales nunca se envían al modelo sin anonimizar. <span class="note">En la app: aviso antes de guardar un texto con cédula, teléfono o salario.</span></li>
+          <li><strong>Cuentas corporativas seguras.</strong> Toda consulta de obra se hace solo desde cuentas empresariales autorizadas con retención de datos en cero. <span class="note">En la app: solo entran usuarios invitados; no hay registro abierto.</span></li>
+          <li><strong>Transparencia en reportes.</strong> Todo informe o comunicado hecho con asistencia de IA lleva la leyenda «Elaborado con asistencia de IA y verificado por la Residencia de Obra». <span class="note">En la app: esta versión no usa IA; ninguna cifra sale de texto generado.</span></li>
+          <li><strong>Seguridad pegada a la fila (RLS).</strong> Ningún usuario ni agente tiene permisos globales de administrador (service_role); el acceso se restringe por fila en la base. <span class="note">En la app: cada consulta pasa por las políticas de la base según el rol.</span></li>
+        </ol>
+      </div>
+      <div class="card">
+        <h2>Clasificación de los datos</h2>
+        <div class="tbl-wrap"><table class="corta"><thead><tr><th>Dato</th><th>Clase</th><th>¿Puede ir al modelo?</th></tr></thead><tbody>
+          <tr><td>Matriz de RFIs, días de mora y bitácora de obra</td><td><span class="pill green">Interno</span></td><td>Sí, en cuenta empresarial</td></tr>
+          <tr><td>Presupuesto detallado, APU comerciales y contratos de contratistas</td><td><span class="pill amber">Confidencial</span></td><td>Anonimizado: montos en pesos reemplazados por porcentajes de variación</td></tr>
+          <tr><td>Cédulas, salarios de obreros y contactos directos de clientes</td><td><span class="pill red">Personal</span></td><td>No</td></tr>
+        </tbody></table></div>
+      </div>
+      <div class="card">
+        <h2>Quién ve qué</h2>
+        <p class="note">Esto lo aplica la base de datos, no la pantalla: aunque alguien fuerce un botón, la base rechaza lo que su rol no permite.</p>
+        <div class="tbl-wrap"><table class="corta"><thead><tr><th>Rol</th><th>Lee</th><th>Escribe</th><th>Aprueba</th></tr></thead><tbody>
+          <tr><td><strong>Residencia de Obra</strong><br><span class="note">residente · admin</span></td><td>Todos los RFIs y la bitácora completa</td><td>Nuevos RFIs, reiteraciones, datos, propuestas de cambio</td><td>Cartas y cambios menores</td></tr>
+          <tr><td><strong>Contratista / Diseñador</strong><br><span class="note">contratista</span></td><td>Solo los RFIs de su especialidad, sin los correos del cliente</td><td>Respuestas técnicas en sus RFIs abiertos</td><td>Nada</td></tr>
+          <tr><td><strong>Interventoría / Dirección de Obra</strong><br><span class="note">director</span></td><td>Todos los RFIs, la bitácora y la auditoría</td><td>Observaciones y validaciones</td><td>Cambios mayores</td></tr>
+          <tr><td><strong>Consulta</strong><br><span class="note">consulta</span></td><td>La matriz, sin bitácora</td><td>Nada</td><td>Nada</td></tr>
+        </tbody></table></div>
+      </div>
     </section>
 
     <section class="tab" id="auditoria" hidden>
@@ -110,7 +155,7 @@
     <section class="tab" id="usuarios" hidden>
       <div class="card">
         <h2>Usuarios y roles</h2>
-        <p class="note">Las cuentas nuevas llegan inactivas. Invítalas desde Supabase (Authentication → Users) y actívalas aquí.</p>
+        <p class="note">Las cuentas nuevas llegan inactivas. Invítalas desde Supabase (Authentication → Users) y actívalas aquí. Un contratista necesita al menos una especialidad: solo verá los RFIs de esos frentes.</p>
         <div id="usuarios-tabla"></div>
         <div id="usuarios-msg"></div>
       </div>

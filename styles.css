@@ -109,3 +109,11 @@ tr.clic:hover td{background:var(--tint)}
 .bitacora li div{overflow-wrap:anywhere;color:var(--muted);white-space:pre-wrap;max-height:220px;overflow:auto}
 .mono{font-family:var(--f-mono);font-size:12px}
 td.wrap{white-space:normal;overflow-wrap:anywhere;max-width:340px}
+
+/* ---- Taller 8: gobernanza ---- */
+table.corta{min-width:560px}
+.reglas{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:10px;font-size:14px}
+.reglas .note{display:block;margin-top:2px}
+.u-frentes{min-height:84px;font-size:13px;padding:4px}
+.panel .seccion{border-top:1px solid var(--line);padding-top:12px;display:flex;flex-direction:column;gap:10px}
+.cambio{border:1px solid var(--line);border-radius:4px;padding:8px 10px;font-size:13px;display:flex;flex-direction:column;gap:6px}
