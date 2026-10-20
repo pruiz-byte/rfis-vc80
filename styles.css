@@ -161,3 +161,10 @@ td.wrap{white-space:normal;overflow-wrap:anywhere;max-width:340px}
   body{background:#fff;padding:0} nav.tabs,.filters,.btn,#detalle .seccion textarea{display:none!important}
   .tbl-wrap{overflow:visible;border:1px solid #1a1a1a} table{min-width:0}
 }
+
+/* ---- Demo sin usuario ---- */
+.demo-banda{max-width:960px;margin:var(--space-3) auto 0;display:flex;justify-content:space-between;align-items:center;gap:var(--space-3);flex-wrap:wrap;background:var(--lds-amarillo);color:var(--on-amarillo);padding:var(--space-2) var(--space-3);font-size:13px}
+.demo-banda strong{font-family:var(--font-titulo);letter-spacing:.06em}
+.demo-rol{display:flex;align-items:center;gap:var(--space-2);font:700 11px var(--font-titulo);text-transform:uppercase;letter-spacing:.04em}
+.demo-rol select{width:auto;padding:4px 8px;font-size:13px;background:var(--surface);color:var(--ink);border-color:var(--on-amarillo)}
+.login.demo-entrada{margin:-24px auto 40px;border-top:1px solid var(--line)}

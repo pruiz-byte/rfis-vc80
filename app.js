@@ -11,11 +11,13 @@
 (function () {
   "use strict";
   const cfg = window.APP_CONFIG;
-  if (!window.supabase || !cfg) {
-    document.getElementById("cargando").innerHTML = '<div class="msg err">No se pudo cargar la conexión con la base. Revisa tu internet y recarga la página; si sigue, avisa al administrador.</div>';
+  // Demo sin usuario: ?demo (o ?demo=contratista, director, consulta…). Datos ficticios, solo lectura, sin tocar la base.
+  const DEMO = new URLSearchParams(location.search).has("demo") && typeof window.crearClienteDemo === "function";
+  if (!DEMO && (!window.supabase || !cfg)) {
+    document.getElementById("cargando").innerHTML = '<div class="msg err">No se pudo cargar la conexión con la base. Revisa tu internet y recarga la página; si sigue, avisa al administrador.</div><p class="note">Mientras tanto puedes <a href="?demo">ver la demo con datos ficticios</a>.</p>';
     return;
   }
-  const sb = window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_KEY);
+  const sb = DEMO ? window.crearClienteDemo() : window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_KEY);
   const $ = (s) => document.querySelector(s);
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
@@ -61,6 +63,7 @@
   /* ---------- sesión ---------- */
   async function arrancar() {
     $("#hoy").textContent = fmt(hoyIso());
+    if (DEMO) prepararDemo();
     const { data } = await sb.auth.getSession();
     await alCambiarSesion(data.session);
     sb.auth.onAuthStateChange((_e, session) => { alCambiarSesion(session); });
@@ -114,6 +117,17 @@
       : "No se pudo enviar el enlace: " + esc(error.message));
   }
   $("#btn-salir").addEventListener("click", async () => { await sb.auth.signOut(); });
+  $("#btn-demo").addEventListener("click", () => { location.href = location.pathname + "?demo"; });
+
+  function prepararDemo() {
+    document.title = "DEMO · RFIs VC80 · Lápiz de Sueños";
+    $("#enc-obra").textContent = "Obra de demostración (datos ficticios)";
+    $("#btn-salir").textContent = "Salir de la demo";
+    const banda = $("#demo-banda");
+    banda.hidden = false;
+    $("#demo-rol").innerHTML = sb.roles.map((r) => `<option value="${r}"${r === sb.rolDemo() ? " selected" : ""}>${esc(ETQ_ROL[r])}</option>`).join("");
+    $("#demo-rol").addEventListener("change", (e) => { location.href = location.pathname + "?demo=" + encodeURIComponent(e.target.value); });
+  }
 
   /* ---------- navegación ---------- */
   document.querySelectorAll("nav.tabs button").forEach((b) => b.addEventListener("click", () => irA(b.dataset.tab)));

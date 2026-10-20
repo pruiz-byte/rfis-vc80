@@ -17,10 +17,14 @@
       <img class="logo-claro" src="img/logo-negro.png" alt="Lápiz de Sueños S.A.S. — Arquitectura y Construcción" width="161" height="44">
       <img class="logo-oscuro" src="img/logo-blanco.png" alt="Lápiz de Sueños S.A.S. — Arquitectura y Construcción" width="161" height="44">
     </div>
-    <div class="meta"><b>OBRA:</b> Villa Corales 80<br><b>FECHA:</b> <span id="hoy" class="num"></span><br><b>PREPARADO POR:</b> Residencia de Obra</div>
+    <div class="meta"><b>OBRA:</b> <span id="enc-obra">Villa Corales 80</span><br><b>FECHA:</b> <span id="hoy" class="num"></span><br><b>PREPARADO POR:</b> Residencia de Obra</div>
   </div>
 </header>
 <div class="wrap">
+  <div class="demo-banda" id="demo-banda" role="status" hidden>
+    <span><strong>DEMO</strong> · Datos ficticios · Solo lectura: nada se guarda</span>
+    <label class="demo-rol" for="demo-rol">Ver como <select id="demo-rol"></select></label>
+  </div>
   <div class="titulo-app">
     <div>
       <h1>Matriz de RFIs</h1>
@@ -47,6 +51,11 @@
       <button class="btn ghost" type="button" id="btn-enlace">Enviarme un enlace de acceso</button>
       <div id="login-msg"></div>
     </form>
+    <div class="card login demo-entrada">
+      <h2>Sin usuario</h2>
+      <p class="note">Recorre la app con datos ficticios y en solo lectura. Puedes cambiar de rol para ver qué ve cada uno. No muestra datos reales de la obra.</p>
+      <button class="btn ghost" type="button" id="btn-demo">Ver la demo</button>
+    </div>
   </section>
 
   <!-- Cuenta pendiente de activación -->
@@ -199,6 +208,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="config.js"></script>
+<script src="demo.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

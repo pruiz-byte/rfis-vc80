@@ -6,7 +6,12 @@ App web de la matriz de RFIs de Villa Corales 80. Usa Supabase para el inicio de
 - `index.html`: pantallas (inicio de sesión, matriz, nuevo RFI, auditoría, usuarios, ajustes).
 - `app.js`: lógica de la app.
 - `styles.css`: diseño.
+- `demo.js`: datos ficticios y cliente de solo lectura para la demo sin usuario.
+- `img/`: logos de Lápiz de Sueños (negro y blanco).
 - `config.js`: dirección y clave publicable de Supabase. La clave publicable está hecha para ir en el navegador; los permisos los aplica la base por rol. Nunca pongas aquí la clave secreta.
+
+## Demo sin usuario
+`https://rfis-vc80.vercel.app/?demo` (o el botón **Ver la demo** en el inicio de sesión) abre la app con **datos ficticios** de `demo.js`, en solo lectura y sin conectarse a la base. Con `?demo=contratista`, `?demo=director`, `?demo=consulta` o `?demo=admin` se ve lo que ve cada rol. La matriz real es información interna y nunca se muestra sin sesión.
 
 ## Publicar en Vercel
 1. Sube estos archivos a un repositorio de GitHub.
