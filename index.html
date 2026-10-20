@@ -3,24 +3,34 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>RFIs VC80</title>
+<title>RFIs VC80 · Lápiz de Sueños</title>
+<link rel="icon" href="img/logo-negro.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700&family=Open+Sans:wght@400;600&display=swap">
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+<header class="top">
+  <div class="enc">
+    <div class="logo">
+      <img class="logo-claro" src="img/logo-negro.png" alt="Lápiz de Sueños S.A.S. — Arquitectura y Construcción" width="161" height="44">
+      <img class="logo-oscuro" src="img/logo-blanco.png" alt="Lápiz de Sueños S.A.S. — Arquitectura y Construcción" width="161" height="44">
+    </div>
+    <div class="meta"><b>OBRA:</b> Villa Corales 80<br><b>FECHA:</b> <span id="hoy" class="num"></span><br><b>PREPARADO POR:</b> Residencia de Obra</div>
+  </div>
+</header>
 <div class="wrap">
-  <header class="top">
+  <div class="titulo-app">
     <div>
-      <h1>RFIs VC80</h1>
-      <div class="sub">Villa Corales 80 · Regla del proyecto: ningún RFI más de <span id="tol">7</span> días sin respuesta · Hoy <span id="hoy" class="num"></span></div>
+      <h1>Matriz de RFIs</h1>
+      <div class="sub">Regla del proyecto: ningún RFI más de <span id="tol">7</span> días sin respuesta</div>
     </div>
     <div class="who" id="who" hidden>
       <span id="who-correo" class="note"></span><span id="who-rol" class="rol"></span>
       <button class="btn small ghost" id="btn-salir" type="button">Cerrar sesión</button>
     </div>
-  </header>
+  </div>
 
   <!-- Estado de carga inicial -->
   <section id="cargando" class="tab"><div class="empty"><span class="spin"></span><br>Cargando…</div></section>
@@ -184,6 +194,7 @@
       </form>
     </section>
   </div>
+  <footer class="pie"><span>Lápiz de Sueños S.A.S. · Arquitectura y Construcción</span><span>RFIs VC80 · Fechas dd/mm/aaaa · Zona horaria de Santo Domingo</span></footer>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>

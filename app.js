@@ -156,7 +156,8 @@
   }
 
   function moraTrasPlazo(f) { return f.dias_mora == null ? null : Math.max(0, f.dias_mora - (S.config?.tolerancia_dias ?? 7)); }
-  const PILL = { vencido: ["red", "Vencido"], por_vencer: ["amber", "Por vencer"], en_plazo: ["green", "En plazo"], requiere_soporte_oficial: ["amber", "Requiere soporte oficial"], respondido: ["grey", "Respondido"] };
+  // Estados con signo y palabra (se leen en impresión blanco y negro)
+  const PILL = { vencido: ["red", "▼ Vencido"], por_vencer: ["amber", "● Por vencer"], en_plazo: ["green", "▲ En plazo"], requiere_soporte_oficial: ["amber", "● Requiere soporte oficial"], respondido: ["grey", "✓ Respondido"] };
 
   function pintarMatriz() {
     const ab = S.filas.filter((f) => f.estado === "abierto");
@@ -388,12 +389,12 @@
 
   /* ---------- solicitudes de cambio ---------- */
   const puedeDecidir = (c) => c.estado === "pendiente" && (c.mayor ? puede("director") : puede("admin", "residente"));
-  const PILL_CAMBIO = { pendiente: ["amber", "Pendiente"], aprobado: ["green", "Aprobado"], rechazado: ["red", "Rechazado"] };
+  const PILL_CAMBIO = { pendiente: ["amber", "● Pendiente"], aprobado: ["green", "✓ Aprobado"], rechazado: ["red", "✗ Rechazado"] };
   function htmlCambio(c) {
     const p = PILL_CAMBIO[c.estado] || ["grey", c.estado];
     const quien = (id) => S.correos?.[id] || "otro usuario";
     return `<div class="cambio" data-cambio="${c.id}">
-      <div class="row"><span class="key">${esc(c.rfi_id)}</span><span class="pill ${c.mayor ? "red" : "grey"}">${c.mayor ? "Mayor · Interventoría" : "Menor · Residencia"}</span><span class="pill ${p[0]}">${p[1]}</span></div>
+      <div class="row"><span class="key">${esc(c.rfi_id)}</span><span class="pill grey">${c.mayor ? "Mayor · Interventoría" : "Menor · Residencia"}</span><span class="pill ${p[0]}">${p[1]}</span></div>
       <div>${esc(c.descripcion)}</div>
       <div class="note">Propuesto ${esc(fmtHora(c.propuesto_en))}${S.correos ? " por " + esc(quien(c.propuesto_por)) : ""}${c.decidido_en ? ` · Decidido ${esc(fmtHora(c.decidido_en))}${S.correos ? " por " + esc(quien(c.decidido_por)) : ""}${c.nota_decision ? ": " + esc(c.nota_decision) : ""}` : ""}</div>
       ${puedeDecidir(c) ? `<div class="row"><input class="c-nota" placeholder="Nota de la decisión (opcional)" aria-label="Nota de la decisión" style="flex:1 1 200px">
