@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>RFIs VC80 · Lápiz de Sueños</title>
+<title>RFIs · Lápiz de Sueños</title>
 <link rel="icon" href="img/logo-negro.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -17,7 +17,7 @@
       <img class="logo-claro" src="img/logo-negro.png" alt="Lápiz de Sueños S.A.S. — Arquitectura y Construcción" width="161" height="44">
       <img class="logo-oscuro" src="img/logo-blanco.png" alt="Lápiz de Sueños S.A.S. — Arquitectura y Construcción" width="161" height="44">
     </div>
-    <div class="meta"><b>OBRA:</b> <span id="enc-obra">Villa Corales 80</span><br><b>FECHA:</b> <span id="hoy" class="num"></span><br><b>PREPARADO POR:</b> Residencia de Obra</div>
+    <div class="meta"><b>OBRA:</b> <select id="sel-proyecto" class="sel-proyecto" aria-label="Proyecto"><option>—</option></select><br><b>FECHA:</b> <span id="hoy" class="num"></span><br><b>PREPARADO POR:</b> Residencia de Obra</div>
   </div>
 </header>
 <div class="wrap">
@@ -27,7 +27,7 @@
   </div>
   <div class="titulo-app">
     <div>
-      <h1>Matriz de RFIs</h1>
+      <h1>Matriz de RFIs <span class="h1-proy" id="h1-proyecto"></span></h1>
       <div class="sub">Regla del proyecto: ningún RFI más de <span id="tol">7</span> días sin respuesta</div>
     </div>
     <div class="who" id="who" hidden>
@@ -71,6 +71,7 @@
       <button role="tab" data-tab="cambios" aria-selected="false" data-roles="admin,residente,director">Cambios<span class="n" id="n-cambios" hidden></span></button>
       <button role="tab" data-tab="auditoria" aria-selected="false" data-roles="admin,director">Auditoría</button>
       <button role="tab" data-tab="usuarios" aria-selected="false" data-roles="admin">Usuarios</button>
+      <button role="tab" data-tab="proyectos" aria-selected="false" data-roles="admin">Proyectos</button>
       <button role="tab" data-tab="politica" aria-selected="false">Política</button>
       <button role="tab" data-tab="ajustes" aria-selected="false">Ajustes</button>
     </nav>
@@ -90,7 +91,7 @@
     <section class="tab" id="nuevo" hidden>
       <form class="card" id="form-nuevo">
         <h2>Nuevo RFI</h2>
-        <p class="note">La llave RFI-VC80-NNN la asigna la base. Si el requerimiento ya existe, no lo crees: abre el RFI en la Matriz y agrega una reiteración.</p>
+        <p class="note">La llave <span id="n-llave">RFI-XXX-NNN</span> la asigna la base, con el consecutivo de este proyecto. Si el requerimiento ya existe, no lo crees: abre el RFI en la Matriz y agrega una reiteración.</p>
         <div class="grid2">
           <label class="field" for="n-frente"><span class="lbl">Frente</span><select id="n-frente" required></select></label>
           <label class="field" for="n-nivel"><span class="lbl">Nivel</span><input id="n-nivel" placeholder="Ej. Primer nivel"></label>
@@ -128,7 +129,7 @@
     <section class="tab" id="politica" hidden>
       <div class="card">
         <h2>Política de uso de datos e IA</h2>
-        <p class="note">Marco normativo del proyecto (Taller 8 · v0.8 · 18/10/2026). Aplica a todo el equipo de Villa Corales 80.</p>
+        <p class="note">Marco normativo (Taller 8 · v0.8 · 18/10/2026). Aplica a todo el equipo de cada proyecto de Lápiz de Sueños.</p>
         <ol class="reglas">
           <li><strong>Supervisión humana obligatoria.</strong> Toda carta formal, reclamo contractual o cambio de especificación lo revisa y aprueba la Residencia de Obra antes de enviarse. <span class="note">En la app: la carta solo se registra con la casilla de revisión marcada; los cambios pasan por aprobación.</span></li>
           <li><strong>Prohibido subir datos personales y comerciales.</strong> Cédulas, datos de contacto de clientes, salarios y presupuestos confidenciales nunca se envían al modelo sin anonimizar. <span class="note">En la app: aviso antes de guardar un texto con cédula, teléfono o salario.</span></li>
@@ -147,9 +148,9 @@
       </div>
       <div class="card">
         <h2>Quién ve qué</h2>
-        <p class="note">Esto lo aplica la base de datos, no la pantalla: aunque alguien fuerce un botón, la base rechaza lo que su rol no permite.</p>
+        <p class="note">El rol se asigna por proyecto: una persona puede ser contratista en una obra y no ver las demás. Esto lo aplica la base de datos, no la pantalla: aunque alguien fuerce un botón, la base rechaza lo que su rol no permite.</p>
         <div class="tbl-wrap"><table class="corta"><thead><tr><th>Rol</th><th>Lee</th><th>Escribe</th><th>Aprueba</th></tr></thead><tbody>
-          <tr><td><strong>Residencia de Obra</strong><br><span class="note">residente · admin</span></td><td>Todos los RFIs y la bitácora completa</td><td>Nuevos RFIs, reiteraciones, datos, propuestas de cambio</td><td>Cartas y cambios menores</td></tr>
+          <tr><td><strong>Residencia de Obra</strong><br><span class="note">residente · admin</span></td><td>Todos los RFIs y la bitácora del proyecto</td><td>Nuevos RFIs, reiteraciones, datos, propuestas de cambio</td><td>Cartas y cambios menores</td></tr>
           <tr><td><strong>Contratista / Diseñador</strong><br><span class="note">contratista</span></td><td>Solo los RFIs de su especialidad, sin los correos del cliente</td><td>Respuestas técnicas en sus RFIs abiertos</td><td>Nada</td></tr>
           <tr><td><strong>Interventoría / Dirección de Obra</strong><br><span class="note">director</span></td><td>Todos los RFIs, la bitácora y la auditoría</td><td>Observaciones y validaciones</td><td>Cambios mayores</td></tr>
           <tr><td><strong>Consulta</strong><br><span class="note">consulta</span></td><td>La matriz, sin bitácora</td><td>Nada</td><td>Nada</td></tr>
@@ -160,7 +161,8 @@
     <section class="tab" id="auditoria" hidden>
       <div class="card">
         <div class="rfi-head"><h2>Auditoría de cambios</h2>
-          <select id="a-tabla" aria-label="Tabla"><option value="">Todas las tablas</option></select></div>
+          <div class="row"><select id="a-tabla" aria-label="Tabla"><option value="">Todas las tablas</option></select>
+          <label class="check" for="a-todo" id="w-a-todo" hidden><input type="checkbox" id="a-todo"> Todos los proyectos y eventos generales</label></div></div>
         <p class="note">Cada cambio en la base: quién, cuándo, desde dónde y qué campos. No se puede editar ni borrar.</p>
         <div id="audit-tabla"></div>
       </div>
@@ -173,20 +175,43 @@
 
     <section class="tab" id="usuarios" hidden>
       <div class="card">
-        <h2>Usuarios y roles</h2>
-        <p class="note">Las cuentas nuevas llegan inactivas. Invítalas desde Supabase (Authentication → Users) y actívalas aquí. Un contratista necesita al menos una especialidad: solo verá los RFIs de esos frentes.</p>
+        <h2>Usuarios y roles · <span id="u-proy"></span></h2>
+        <p class="note">Las cuentas nuevas llegan inactivas: invítalas desde Supabase (Authentication → Users), actívalas aquí y dales un rol en cada proyecto (cambia de proyecto arriba). "Admin de todo" ve y gestiona todos los proyectos. Un contratista necesita al menos una especialidad: solo verá los RFIs de esos frentes.</p>
         <div id="usuarios-tabla"></div>
         <div id="usuarios-msg"></div>
       </div>
     </section>
 
+    <section class="tab" id="proyectos" hidden>
+      <form class="card" id="form-proyecto">
+        <h2>Nuevo proyecto</h2>
+        <p class="note">El código va en todas las llaves de sus RFIs (RFI-C81-001) y no se puede cambiar después.</p>
+        <div class="grid2">
+          <label class="field" for="np-codigo"><span class="lbl">Código (2 a 8 letras o números)</span><input id="np-codigo" maxlength="8" placeholder="Ej. C81" autocomplete="off" style="text-transform:uppercase"></label>
+          <label class="field" for="np-nombre"><span class="lbl">Nombre</span><input id="np-nombre" placeholder="Ej. Villa Corales 81"></label>
+        </div>
+        <div class="grid2">
+          <label class="field" for="np-cliente"><span class="lbl">Cliente</span><input id="np-cliente"></label>
+          <label class="field" for="np-tol"><span class="lbl">Días de tolerancia para responder un RFI</span><input id="np-tol" type="number" min="1" max="60" value="7"></label>
+        </div>
+        <div class="row"><button class="btn" type="submit">Crear proyecto</button></div>
+        <div id="np-msg"></div>
+      </form>
+      <div class="card">
+        <h2>Proyectos de la empresa</h2>
+        <div id="proyectos-tabla"></div>
+        <div id="proyectos-msg"></div>
+      </div>
+    </section>
+
     <section class="tab" id="ajustes" hidden>
       <form class="card" id="form-ajustes">
-        <h2>Proyecto</h2>
+        <h2>Proyecto · <span id="aj-proy"></span></h2>
         <div class="grid2">
           <label class="field" for="c-ini"><span class="lbl">Inicio del cese navideño</span><input id="c-ini" type="date"></label>
           <label class="field" for="c-fin"><span class="lbl">Fin del cese</span><input id="c-fin" type="date"></label>
         </div>
+        <label class="field" for="c-tol" style="max-width:280px"><span class="lbl">Días de tolerancia para responder un RFI</span><input id="c-tol" type="number" min="1" max="60"></label>
         <div class="note" id="c-dias"></div>
         <div class="row"><button class="btn" type="submit" id="btn-ajustes">Guardar</button></div>
         <div id="ajustes-msg"></div>
@@ -203,7 +228,7 @@
       </form>
     </section>
   </div>
-  <footer class="pie"><span>Lápiz de Sueños S.A.S. · Arquitectura y Construcción</span><span>RFIs VC80 · Fechas dd/mm/aaaa · Zona horaria de Santo Domingo</span></footer>
+  <footer class="pie"><span>Lápiz de Sueños S.A.S. · Arquitectura y Construcción</span><span>RFIs · Fechas dd/mm/aaaa · Zona horaria de Santo Domingo</span></footer>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>

@@ -1,5 +1,5 @@
 /*
- * RFIs VC80 · app web (Vercel + Supabase)
+ * RFIs · app web de Lápiz de Sueños para varios proyectos (Vercel + Supabase)
  * - Acceso: Supabase Auth con enlace por correo, solo para usuarios invitados.
  * - Permisos: los decide la base por rol (admin, residente, director = Interventoría, consulta,
  *   contratista = solo su especialidad). La app solo oculta botones; aunque alguien los forzara,
@@ -21,7 +21,8 @@
   const $ = (s) => document.querySelector(s);
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
-  const S = { user: null, perfil: null, frentes: [], config: null, filas: [], abierto: null };
+  // p = código del proyecto activo; config = fila del proyecto activo (tolerancia, cese)
+  const S = { user: null, perfil: null, esAdmin: false, proyectos: [], miembros: {}, p: null, frentes: [], config: null, filas: [], abierto: null };
 
   /* ---------- fechas (zona de la obra) ---------- */
   const ZONA = "America/Santo_Domingo";
@@ -33,7 +34,11 @@
   const fmtHora = (ts) => (ts ? new Intl.DateTimeFormat("es-DO", { timeZone: ZONA, dateStyle: "short", timeStyle: "short" }).format(new Date(ts)) : "—");
 
   /* ---------- roles ---------- */
-  const rol = () => S.perfil?.rol;
+  // Rol en el proyecto activo: admin global, o el que tenga asignado en ese proyecto
+  const rol = () => (S.esAdmin ? "admin" : S.miembros[S.p]?.rol);
+  const misFrentes = () => S.miembros[S.p]?.frentes || [];
+  const leer = (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } };
+  const guardar = (k, v) => { try { localStorage.setItem(k, v); } catch (e) { /* sin almacenamiento */ } };
   const puede = (...roles) => roles.includes(rol());
   const ETQ_ROL = { admin: "Admin · Residencia", residente: "Residencia de Obra", director: "Interventoría", consulta: "Consulta", contratista: "Contratista" };
 
@@ -77,17 +82,49 @@
     if (!session) { S.user = null; S.perfil = null; $("#who").hidden = true; mostrar("login"); return; }
     S.user = session.user;
     mostrar("cargando");
-    const { data: perfil, error } = await sb.from("perfiles").select("rol,activo,correo,nombre,frentes").eq("id", uid).maybeSingle();
+    const { data: perfil, error } = await sb.from("perfiles").select("rol,activo,correo,nombre").eq("id", uid).maybeSingle();
     $("#who").hidden = false;
     $("#who-correo").textContent = session.user.email || "";
     if (error || !perfil || !perfil.activo) { $("#who-rol").textContent = "pendiente"; mostrar("pendiente"); return; }
     S.perfil = perfil;
-    $("#who-rol").textContent = ETQ_ROL[perfil.rol] || perfil.rol;
-    document.querySelectorAll("nav.tabs button").forEach((b) => {
-      const r = b.dataset.roles; b.hidden = r ? !r.split(",").includes(perfil.rol) : false;
-    });
+    S.esAdmin = perfil.rol === "admin";
+    const [pr, mi, fr] = await Promise.all([
+      sb.from("proyectos").select("*").order("codigo"),
+      sb.from("miembros").select("proyecto_codigo,rol,frentes,activo").eq("usuario_id", uid),
+      sb.from("frentes_tecnicos").select("codigo,nombre").order("codigo")
+    ]);
+    S.miembros = Object.fromEntries((mi.data || []).filter((m) => m.activo).map((m) => [m.proyecto_codigo, m]));
+    S.proyectos = (pr.data || []).filter((x) => S.esAdmin || S.miembros[x.codigo]);
+    S.frentes = fr.data || [];
+    if (!S.proyectos.length) {
+      $("#who-rol").textContent = "sin proyecto";
+      $("#pendiente").innerHTML = `<div class="empty"><strong>Sin proyectos asignados</strong>Tu cuenta está activa, pero todavía no te asignan a ningún proyecto. Pídeselo al administrador y recarga la página.</div>`;
+      mostrar("pendiente"); return;
+    }
     mostrar("app");
-    await cargarBase();
+    const pedido = new URLSearchParams(location.search).get("p") || leer("rfis-proyecto");
+    await elegirProyecto(S.proyectos.some((x) => x.codigo === pedido) ? pedido : S.proyectos[0].codigo);
+  }
+
+  /* ---------- proyecto activo ---------- */
+  function pintarSelectorProyecto() {
+    $("#sel-proyecto").innerHTML = S.proyectos.map((x) => `<option value="${esc(x.codigo)}"${x.codigo === S.p ? " selected" : ""}>${esc(x.nombre)} (${esc(x.codigo)})${x.activo ? "" : " · inactivo"}</option>`).join("");
+    $("#sel-proyecto").disabled = S.proyectos.length < 2;
+  }
+  $("#sel-proyecto").addEventListener("change", (e) => elegirProyecto(e.target.value));
+  async function elegirProyecto(codigo) {
+    S.p = codigo; guardar("rfis-proyecto", codigo);
+    S.config = S.proyectos.find((x) => x.codigo === codigo);
+    S.filas = []; S.abierto = null; $("#detalle").innerHTML = "";
+    pintarSelectorProyecto();
+    $("#h1-proyecto").textContent = S.config.nombre;
+    $("#tol").textContent = S.config.tolerancia_dias;
+    $("#n-llave").textContent = "RFI-" + codigo + "-NNN";
+    $("#who-rol").textContent = ETQ_ROL[rol()] || rol();
+    document.querySelectorAll("nav.tabs button").forEach((b) => {
+      const r = b.dataset.roles; b.hidden = r ? !r.split(",").includes(rol()) : false;
+    });
+    cargarBase();
     irA("matriz");
     contarPendientes();
   }
@@ -120,8 +157,7 @@
   $("#btn-demo").addEventListener("click", () => { location.href = location.pathname + "?demo"; });
 
   function prepararDemo() {
-    document.title = "DEMO · RFIs VC80 · Lápiz de Sueños";
-    $("#enc-obra").textContent = "Obra de demostración (datos ficticios)";
+    document.title = "DEMO · RFIs · Lápiz de Sueños";
     $("#btn-salir").textContent = "Salir de la demo";
     const banda = $("#demo-banda");
     banda.hidden = false;
@@ -138,19 +174,13 @@
     if (t === "auditoria") cargarAuditoria();
     if (t === "cambios") cargarCambios();
     if (t === "usuarios") cargarUsuarios();
+    if (t === "proyectos") cargarProyectos();
     if (t === "ajustes") pintarAjustes();
   }
 
   /* ---------- datos base ---------- */
-  async function cargarBase() {
-    const [fr, cf] = await Promise.all([
-      sb.from("frentes_tecnicos").select("codigo,nombre").order("codigo"),
-      sb.from("config_proyecto").select("*").eq("id", 1).maybeSingle()
-    ]);
-    S.frentes = fr.data || [];
-    S.config = cf.data || { tolerancia_dias: 7 };
-    $("#tol").textContent = S.config.tolerancia_dias;
-    const visibles = puede("contratista") ? S.frentes.filter((f) => (S.perfil.frentes || []).includes(f.codigo)) : S.frentes;
+  function cargarBase() {
+    const visibles = puede("contratista") ? S.frentes.filter((f) => misFrentes().includes(f.codigo)) : S.frentes;
     $("#f-frente").innerHTML = `<option value="">${puede("contratista") ? "Mis especialidades" : "Todos los frentes"}</option>` + visibles.map((f) => `<option value="${esc(f.codigo)}">${esc(f.codigo)} · ${esc(f.nombre)}</option>`).join("");
     const opts = S.frentes.map((f) => `<option value="${esc(f.codigo)}">${esc(f.codigo)} · ${esc(f.nombre)}</option>`).join("");
     $("#n-frente").innerHTML = `<option value="">Elige el frente</option>` + opts;
@@ -162,7 +192,9 @@
 
   async function cargarMatriz() {
     $("#tabla").innerHTML = `<div class="empty"><span class="spin"></span><br>Cargando la matriz…</div>`;
-    const { data, error } = await sb.from("v_registro_mora").select("*").order("id");
+    const p = S.p;
+    const { data, error } = await sb.from("v_registro_mora").select("*").eq("proyecto_codigo", p).order("id");
+    if (p !== S.p) return; // cambiaron de proyecto mientras cargaba
     if (error) { $("#tabla").innerHTML = ""; msg("#matriz-msg", "err", "No se pudo leer la matriz: " + esc(error.message) + ". Recarga la página; si sigue, avisa al administrador."); return; }
     msg("#matriz-msg", "", "");
     S.filas = data || [];
@@ -389,7 +421,7 @@
     if (!datosOk([$("#n-necesidad").value, $("#n-origen").value], $("#btn-crear"), "#nuevo-msg")) return;
     $("#btn-crear").disabled = true;
     const { data, error } = await sb.rpc("crear_rfi", {
-      p_frente: $("#n-frente").value, p_nivel: $("#n-nivel").value, p_necesidad: $("#n-necesidad").value.trim(),
+      p_proyecto: S.p, p_frente: $("#n-frente").value, p_nivel: $("#n-nivel").value, p_necesidad: $("#n-necesidad").value.trim(),
       p_fecha_solicitud: fecha, p_fecha_tipo: tipo,
       p_lead_cantidad: lead > 0 ? lead : null, p_lead_unidad: lead > 0 ? $("#n-lead-u").value : null,
       p_detiene: $("#n-detiene").checked, p_ruta_critica: $("#n-ruta").checked, p_texto_origen: $("#n-origen").value
@@ -435,7 +467,7 @@
   async function cargarCambios() {
     $("#cambios-tabla").innerHTML = `<span class="spin"></span>`;
     await cargarCorreos();
-    let q = sb.from("rfi_cambios").select("*").order("id", { ascending: false }).limit(200);
+    let q = sb.from("rfi_cambios").select("*").like("rfi_id", "RFI-" + S.p + "-%").order("id", { ascending: false }).limit(200);
     if ($("#c-filtro").value) q = q.eq("estado", $("#c-filtro").value);
     const { data, error } = await q;
     if (error) { $("#cambios-tabla").innerHTML = `<div class="msg err">No se pudieron leer las solicitudes: ${esc(error.message)}</div>`; return; }
@@ -444,26 +476,29 @@
   }
   async function contarPendientes() {
     if (!puede("admin", "residente", "director")) return;
-    const { data } = await sb.from("rfi_cambios").select("id,mayor,estado").eq("estado", "pendiente");
+    const { data } = await sb.from("rfi_cambios").select("id,mayor,estado").like("rfi_id", "RFI-" + S.p + "-%").eq("estado", "pendiente");
     const n = (data || []).filter(puedeDecidir).length;
     $("#n-cambios").hidden = !n; $("#n-cambios").textContent = n;
   }
 
   /* ---------- auditoría ---------- */
-  const TABLAS = ["rfis", "rfi_seguimientos", "rfi_cambios", "responsables", "frentes_tecnicos", "perfiles", "config_proyecto", "levantamiento_medidas", "areas", "muros", "huecos", "elementos_lineales"];
+  const TABLAS = ["rfis", "rfi_seguimientos", "rfi_cambios", "responsables", "frentes_tecnicos", "perfiles", "proyectos", "miembros", "levantamiento_medidas", "areas", "muros", "huecos", "elementos_lineales"];
   $("#a-tabla").innerHTML = `<option value="">Todas las tablas</option>` + TABLAS.map((t) => `<option value="${t}">${t}</option>`).join("");
   $("#a-tabla").addEventListener("change", cargarAuditoria);
+  $("#a-todo").addEventListener("change", cargarAuditoria);
 
   async function cargarAuditoria() {
     $("#audit-tabla").innerHTML = `<span class="spin"></span>`;
-    let q = sb.from("auditoria_eventos").select("id,ocurrido_en,usuario_correo,rol,origen,tabla,operacion,llave,campos_cambiados").order("id", { ascending: false }).limit(200);
+    $("#w-a-todo").hidden = !S.esAdmin;
+    let q = sb.from("auditoria_eventos").select("id,ocurrido_en,usuario_correo,rol,origen,tabla,operacion,llave,campos_cambiados,proyecto_codigo").order("id", { ascending: false }).limit(200);
     if ($("#a-tabla").value) q = q.eq("tabla", $("#a-tabla").value);
+    if (!(S.esAdmin && $("#a-todo").checked)) q = q.eq("proyecto_codigo", S.p);
     const { data, error } = await q;
     if (error) { $("#audit-tabla").innerHTML = `<div class="msg err">No se pudo leer la auditoría: ${esc(error.message)}</div>`; return; }
     $("#audit-tabla").innerHTML = !data.length ? `<div class="empty"><strong>Sin eventos</strong>Todavía no hay cambios registrados para este filtro.</div>` :
-      `<div class="tbl-wrap"><table><thead><tr><th>Fecha</th><th>Quién</th><th>Origen</th><th>Tabla</th><th>Operación</th><th>Registro</th><th>Campos</th></tr></thead><tbody>${
+      `<div class="tbl-wrap"><table><thead><tr><th>Fecha</th><th>Quién</th><th>Origen</th><th>Proyecto</th><th>Tabla</th><th>Operación</th><th>Registro</th><th>Campos</th></tr></thead><tbody>${
         data.map((e) => `<tr><td class="num">${esc(fmtHora(e.ocurrido_en))}</td><td>${esc(e.usuario_correo || "—")}${e.rol ? `<br><span class="note">${esc(e.rol)}</span>` : ""}</td>
-          <td class="wrap note">${esc(e.origen)}</td><td class="mono">${esc(e.tabla)}</td><td>${esc(e.operacion)}</td><td class="mono">${esc(e.llave || "—")}</td>
+          <td class="wrap note">${esc(e.origen)}</td><td class="mono">${esc(e.proyecto_codigo || "general")}</td><td class="mono">${esc(e.tabla)}</td><td>${esc(e.operacion)}</td><td class="mono">${esc(e.llave || "—")}</td>
           <td class="wrap mono">${esc((e.campos_cambiados || []).join(", ") || "—")}</td></tr>`).join("")}</tbody></table></div>`;
     const ac = await sb.rpc("accesos_recientes", { limite: 100 });
     $("#accesos-tabla").innerHTML = ac.error ? `<div class="msg err">No se pudieron leer los accesos: ${esc(ac.error.message)}</div>` :
@@ -474,33 +509,88 @@
 
   /* ---------- usuarios ---------- */
   async function cargarUsuarios() {
-    const { data, error } = await sb.from("perfiles").select("id,correo,nombre,empresa,rol,activo,creado_en,frentes").order("creado_en");
-    if (error) { $("#usuarios-tabla").innerHTML = `<div class="msg err">${esc(error.message)}</div>`; return; }
-    const roles = ["admin", "residente", "director", "consulta", "contratista"];
-    $("#usuarios-tabla").innerHTML = `<div class="tbl-wrap"><table><thead><tr><th>Correo</th><th>Nombre</th><th>Rol</th><th>Especialidad (contratista)</th><th>Activo</th><th></th></tr></thead><tbody>${
-      data.map((p) => `<tr data-id="${esc(p.id)}"><td>${esc(p.correo)}</td><td><input class="u-nombre" value="${esc(p.nombre || "")}" aria-label="Nombre"></td>
-        <td><select class="u-rol" aria-label="Rol">${roles.map((r) => `<option value="${r}"${r === p.rol ? " selected" : ""}>${esc(ETQ_ROL[r])}</option>`).join("")}</select></td>
-        <td><select class="u-frentes" multiple aria-label="Especialidad">${S.frentes.map((f) => `<option value="${esc(f.codigo)}"${(p.frentes || []).includes(f.codigo) ? " selected" : ""}>${esc(f.codigo)} · ${esc(f.nombre)}</option>`).join("")}</select></td>
-        <td><input type="checkbox" class="u-activo" aria-label="Activo"${p.activo ? " checked" : ""}></td>
-        <td><button class="btn small" type="button">Guardar</button></td></tr>`).join("")}</tbody></table></div>`;
+    $("#u-proy").textContent = S.config.nombre;
+    const [pf, mi] = await Promise.all([
+      sb.from("perfiles").select("id,correo,nombre,rol,activo,creado_en").order("creado_en"),
+      sb.from("miembros").select("usuario_id,rol,frentes,activo").eq("proyecto_codigo", S.p)
+    ]);
+    if (pf.error) { $("#usuarios-tabla").innerHTML = `<div class="msg err">${esc(pf.error.message)}</div>`; return; }
+    const m = Object.fromEntries((mi.data || []).map((x) => [x.usuario_id, x]));
+    const ROLES_P = ["residente", "director", "consulta", "contratista"];
+    $("#usuarios-tabla").innerHTML = `<div class="tbl-wrap"><table><thead><tr><th>Correo</th><th>Nombre</th><th>Cuenta activa</th><th>Admin de todo</th><th>Rol en ${esc(S.p)}</th><th>Especialidad (contratista)</th><th></th></tr></thead><tbody>${
+      pf.data.map((u) => {
+        const mm = m[u.id] && m[u.id].activo ? m[u.id] : null;
+        return `<tr data-id="${esc(u.id)}"><td>${esc(u.correo)}</td><td><input class="u-nombre" value="${esc(u.nombre || "")}" aria-label="Nombre"></td>
+        <td><input type="checkbox" class="u-activo" aria-label="Cuenta activa"${u.activo ? " checked" : ""}></td>
+        <td><input type="checkbox" class="u-admin" aria-label="Admin de todos los proyectos"${u.rol === "admin" ? " checked" : ""}></td>
+        <td><select class="u-rol" aria-label="Rol en el proyecto"><option value="">Sin acceso</option>${ROLES_P.map((r) => `<option value="${r}"${mm && mm.rol === r ? " selected" : ""}>${esc(ETQ_ROL[r])}</option>`).join("")}</select></td>
+        <td><select class="u-frentes" multiple aria-label="Especialidad">${S.frentes.map((f) => `<option value="${esc(f.codigo)}"${mm && (mm.frentes || []).includes(f.codigo) ? " selected" : ""}>${esc(f.codigo)} · ${esc(f.nombre)}</option>`).join("")}</select></td>
+        <td><button class="btn small" type="button">Guardar</button></td></tr>`;
+      }).join("")}</tbody></table></div>`;
     document.querySelectorAll("#usuarios-tabla tr[data-id] button").forEach((b) => b.addEventListener("click", async () => {
       const tr = b.closest("tr"), id = tr.dataset.id;
-      const nuevoRol = tr.querySelector(".u-rol").value, activo = tr.querySelector(".u-activo").checked;
-      if (id === S.user.id && (nuevoRol !== "admin" || !activo)) return msg("#usuarios-msg", "warn", "No puedes quitarte tu propio rol de admin desde aquí: te quedarías sin acceso a esta pantalla.");
+      const activo = tr.querySelector(".u-activo").checked, admin = tr.querySelector(".u-admin").checked;
+      const rolP = tr.querySelector(".u-rol").value;
       const frentes = [...tr.querySelector(".u-frentes").selectedOptions].map((o) => o.value);
-      if (nuevoRol === "contratista" && !frentes.length) return msg("#usuarios-msg", "warn", "Elige al menos una especialidad para el contratista (Ctrl o Cmd + clic para varias). Sin ella no vería ningún RFI.");
-      const { error } = await sb.from("perfiles").update({ rol: nuevoRol, activo, frentes: nuevoRol === "contratista" ? frentes : [], nombre: tr.querySelector(".u-nombre").value.trim() || null }).eq("id", id);
-      msg("#usuarios-msg", error ? "err" : "ok", error ? "No se guardó: " + esc(error.message) : "Usuario actualizado. El cambio quedó en la auditoría.");
+      if (id === S.user.id && (!admin || !activo)) return msg("#usuarios-msg", "warn", "No puedes quitarte tu propio acceso de admin desde aquí: te quedarías sin esta pantalla.");
+      if (rolP === "contratista" && !frentes.length) return msg("#usuarios-msg", "warn", "Elige al menos una especialidad para el contratista (Ctrl o Cmd + clic para varias). Sin ella no vería ningún RFI.");
+      const r1 = await sb.from("perfiles").update({ rol: admin ? "admin" : "consulta", activo, nombre: tr.querySelector(".u-nombre").value.trim() || null }).eq("id", id);
+      if (r1.error) return msg("#usuarios-msg", "err", "No se guardó la cuenta: " + esc(r1.error.message));
+      let r2 = { error: null };
+      if (rolP) r2 = await sb.from("miembros").upsert({ usuario_id: id, proyecto_codigo: S.p, rol: rolP, frentes: rolP === "contratista" ? frentes : [], activo: true }, { onConflict: "usuario_id,proyecto_codigo" });
+      else if (m[id]) r2 = await sb.from("miembros").update({ activo: false }).eq("usuario_id", id).eq("proyecto_codigo", S.p);
+      if (r2.error) return msg("#usuarios-msg", "err", "Se guardó la cuenta, pero no el rol en el proyecto: " + esc(r2.error.message));
+      msg("#usuarios-msg", "ok", `Usuario actualizado${rolP ? " con rol " + esc(ETQ_ROL[rolP]) + " en " + esc(S.p) : " sin acceso a " + esc(S.p)}. El cambio quedó en la auditoría.`);
+      cargarUsuarios();
     }));
   }
+
+  /* ---------- proyectos (admin) ---------- */
+  async function cargarProyectos() {
+    const { data, error } = await sb.from("proyectos").select("*").order("codigo");
+    if (error) { $("#proyectos-tabla").innerHTML = `<div class="msg err">${esc(error.message)}</div>`; return; }
+    S.proyectos = data;
+    pintarSelectorProyecto();
+    $("#proyectos-tabla").innerHTML = `<div class="tbl-wrap"><table class="corta"><thead><tr><th>Código</th><th>Nombre</th><th>Cliente</th><th>Días de tolerancia</th><th>Activo</th><th></th></tr></thead><tbody>${
+      data.map((x) => `<tr data-cod="${esc(x.codigo)}"><td><span class="key">${esc(x.codigo)}</span></td>
+        <td><input class="pr-nombre" value="${esc(x.nombre)}" aria-label="Nombre"></td>
+        <td><input class="pr-cliente" value="${esc(x.cliente || "")}" aria-label="Cliente"></td>
+        <td><input class="pr-tol" type="number" min="1" max="60" value="${x.tolerancia_dias}" aria-label="Días de tolerancia" style="width:90px"></td>
+        <td><input type="checkbox" class="pr-activo" aria-label="Activo"${x.activo ? " checked" : ""}></td>
+        <td><button class="btn small" type="button">Guardar</button></td></tr>`).join("")}</tbody></table></div>`;
+    document.querySelectorAll("#proyectos-tabla tr[data-cod] button").forEach((b) => b.addEventListener("click", async () => {
+      const tr = b.closest("tr"), cod = tr.dataset.cod;
+      const tol = parseInt(tr.querySelector(".pr-tol").value, 10);
+      if (!tr.querySelector(".pr-nombre").value.trim()) return msg("#proyectos-msg", "warn", "El nombre no puede quedar vacío.");
+      if (!(tol >= 1 && tol <= 60)) return msg("#proyectos-msg", "warn", "Los días de tolerancia van de 1 a 60.");
+      const { error: e } = await sb.from("proyectos").update({ nombre: tr.querySelector(".pr-nombre").value.trim(), cliente: tr.querySelector(".pr-cliente").value.trim() || null, tolerancia_dias: tol, activo: tr.querySelector(".pr-activo").checked }).eq("codigo", cod);
+      if (e) return msg("#proyectos-msg", "err", "No se guardó: " + esc(e.message));
+      msg("#proyectos-msg", "ok", "Proyecto " + esc(cod) + " actualizado.");
+      await cargarProyectos();
+      if (cod === S.p) { S.config = S.proyectos.find((x) => x.codigo === cod); $("#h1-proyecto").textContent = S.config.nombre; $("#tol").textContent = S.config.tolerancia_dias; }
+    }));
+  }
+  $("#form-proyecto").addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    const cod = $("#np-codigo").value.trim().toUpperCase(), nom = $("#np-nombre").value.trim(), tol = parseInt($("#np-tol").value, 10) || 7;
+    if (!/^[A-Z0-9]{2,8}$/.test(cod)) return msg("#np-msg", "warn", "El código va de 2 a 8 letras o números, sin espacios (ej. C81). Queda en todas las llaves y no se puede cambiar después.");
+    if (!nom) return msg("#np-msg", "warn", "Escribe el nombre del proyecto.");
+    if (S.proyectos.some((x) => x.codigo === cod)) return msg("#np-msg", "warn", "Ya existe un proyecto con el código " + esc(cod) + ".");
+    const { error } = await sb.from("proyectos").insert({ codigo: cod, nombre: nom, cliente: $("#np-cliente").value.trim() || null, tolerancia_dias: tol });
+    if (error) return msg("#np-msg", "err", "No se creó: " + esc(error.message));
+    $("#form-proyecto").reset();
+    msg("#np-msg", "ok", `Proyecto <span class="key">${esc(cod)}</span> creado. Sus RFIs serán RFI-${esc(cod)}-001, 002… Asigna su equipo en Usuarios después de cambiar a ese proyecto arriba.`);
+    await cargarProyectos();
+  });
 
   /* ---------- ajustes ---------- */
   function diasCese(a, b) { return a && b && b >= a ? diaNum(b) - diaNum(a) + 1 : null; }
   function pintarAjustes() {
     const c = S.config || {};
-    $("#c-ini").value = c.cese_inicio || ""; $("#c-fin").value = c.cese_fin || "";
+    $("#c-ini").value = c.cese_inicio || ""; $("#c-fin").value = c.cese_fin || ""; $("#c-tol").value = c.tolerancia_dias || 7;
+    $("#aj-proy").textContent = c.nombre + " (" + c.codigo + ")";
     const ed = puede("admin", "residente");
-    ["#c-ini", "#c-fin", "#btn-ajustes"].forEach((s) => ($(s).disabled = !ed));
+    ["#c-ini", "#c-fin", "#c-tol", "#btn-ajustes"].forEach((s) => ($(s).disabled = !ed));
     actualizarDias();
   }
   function actualizarDias() {
@@ -512,9 +602,11 @@
     ev.preventDefault();
     const a = $("#c-ini").value || null, b = $("#c-fin").value || null;
     if (a && b && b < a) return msg("#ajustes-msg", "err", "El fin del cese debe ser igual o posterior al inicio.");
-    const { error } = await sb.from("config_proyecto").update({ cese_inicio: a, cese_fin: b, actualizado_en: new Date().toISOString() }).eq("id", 1);
+    const tol = parseInt($("#c-tol").value, 10);
+    if (!(tol >= 1 && tol <= 60)) return msg("#ajustes-msg", "warn", "Los días de tolerancia van de 1 a 60.");
+    const { error } = await sb.from("proyectos").update({ cese_inicio: a, cese_fin: b, tolerancia_dias: tol }).eq("codigo", S.p);
     if (error) return msg("#ajustes-msg", "err", "No se guardó: " + esc(error.message));
-    S.config.cese_inicio = a; S.config.cese_fin = b;
+    S.config.cese_inicio = a; S.config.cese_fin = b; S.config.tolerancia_dias = tol; $("#tol").textContent = tol;
     msg("#ajustes-msg", "ok", "Guardado.");
   });
 
